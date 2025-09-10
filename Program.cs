@@ -31,35 +31,42 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-    const int maxRetries = 10;
-    int retries = 0;
-    bool isConnected = false;
-
-    while (retries < maxRetries && !isConnected)
+    try
     {
-        try
+        Console.WriteLine("Attempting to connect to the database...");
+        
+        // Test connection first
+        if (db.Database.CanConnect())
         {
-            Console.WriteLine($"Attempting to connect to the database... (Attempt {retries + 1}/{maxRetries})");
-            db.Database.Migrate();
-            Console.WriteLine("Database created and migrations applied successfully.");
-            isConnected = true;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Connection failed: {ex.Message}");
-            retries++;
-            if (retries < maxRetries)
+            Console.WriteLine("Database connection successful.");
+            
+            // Create database if it doesn't exist
+            using (var connection = db.Database.GetDbConnection())
             {
-                Console.WriteLine("Waiting 5 seconds before retrying...");
-                Thread.Sleep(5000);
+                connection.Open();
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = "IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = 'ProductDb') CREATE DATABASE ProductDb";
+                    command.ExecuteNonQuery();
+                    Console.WriteLine("Database ProductDb ensured to exist.");
+                }
             }
+            
+            // Apply migrations (this will create tables if they don't exist)
+            db.Database.Migrate();
+            
+            Console.WriteLine("Migrations applied successfully.");
+        }
+        else
+        {
+            Console.WriteLine("Warning: Cannot connect to database. Application will start but database operations may fail.");
         }
     }
-
-    if (!isConnected)
+    catch (Exception ex)
     {
-        Console.WriteLine("Failed to connect to the database after multiple retries.");
-        return;
+        Console.WriteLine($"Warning: Database connection failed: {ex.Message}");
+        Console.WriteLine($"Full error details: {ex}");
+        Console.WriteLine("Application will start but database operations may fail.");
     }
 }
 
