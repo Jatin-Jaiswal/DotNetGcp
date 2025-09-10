@@ -2,10 +2,12 @@ pipeline {
     agent any
     
     environment {
-        GCR_PROJECT = 'iron-handler-471307-u7'
+        PROJECT_ID = 'iron-handler-471307-u7'
         GCR_REGISTRY = 'gcr.io'
-        IMAGE_BACKEND = "${GCR_REGISTRY}/${GCR_PROJECT}/dotnet-crud-backend"
-        IMAGE_FRONTEND = "${GCR_REGISTRY}/${GCR_PROJECT}/dotnet-crud-frontend"
+        IMAGE_BACKEND = "${GCR_REGISTRY}/${PROJECT_ID}/dotnet-crud-backend"
+        IMAGE_FRONTEND = "${GCR_REGISTRY}/${PROJECT_ID}/dotnet-crud-frontend"
+        CLUSTER_NAME = 'jenkins-cluster'
+        REGION = 'us-central1'
         KUBE_NAMESPACE = 'dotnet-app-gcp'
     }
     
@@ -16,41 +18,70 @@ pipeline {
             }
         }
         
-        stage('Build Backend Image') {
-            steps {
-                script {
-                    def backendImage = docker.build("${IMAGE_BACKEND}:${BUILD_NUMBER}")
-                    docker.withRegistry("https://${GCR_REGISTRY}", 'gcp-service-account') {
-                        backendImage.push("${BUILD_NUMBER}")
-                        backendImage.push("latest")
-                    }
-                }
-            }
-        }
-        
-        stage('Build Frontend Image') {
-            steps {
-                script {
-                    def frontendImage = docker.build("${IMAGE_FRONTEND}:${BUILD_NUMBER}", "-f frontend.Dockerfile .")
-                    docker.withRegistry("https://${GCR_REGISTRY}", 'gcp-service-account') {
-                        frontendImage.push("${BUILD_NUMBER}")
-                        frontendImage.push("latest")
-                    }
-                }
-            }
-        }
-        
-        stage('Deploy to GKE') {
+        stage('Docker Build') {
             steps {
                 script {
                     sh """
-                        gcloud container clusters get-credentials jenkins-cluster --region=us-central1
-                        kubectl apply -f k8s/
-                        kubectl set image deployment/dotnet-crud-backend backend=${IMAGE_BACKEND}:${BUILD_NUMBER} -n ${KUBE_NAMESPACE}
-                        kubectl set image deployment/dotnet-crud-frontend frontend=${IMAGE_FRONTEND}:${BUILD_NUMBER} -n ${KUBE_NAMESPACE}
-                        kubectl rollout status deployment/dotnet-crud-backend -n ${KUBE_NAMESPACE}
-                        kubectl rollout status deployment/dotnet-crud-frontend -n ${KUBE_NAMESPACE}
+                        docker build -f backend.Dockerfile -t ${IMAGE_BACKEND}:${BUILD_NUMBER} .
+                        docker build -f frontend.Dockerfile -t ${IMAGE_FRONTEND}:${BUILD_NUMBER} .
                     """
+                }
+            }
+        }
+
+        stage('Push Docker Images to GCR') {
+            steps {
+                withCredentials([file(credentialsId: 'jenkins-gke-sa', variable: 'GCP_KEY_FILE')]) {
+                    sh '''
+                    set -e
+                    echo "Activating Google Cloud Service Account..."
+                    gcloud auth activate-service-account --key-file=${GCP_KEY_FILE}
+                    gcloud config set project ${PROJECT_ID}
+
+                    echo "Configuring Docker to use gcloud as a credential helper..."
+                    gcloud auth configure-docker ${GCR_REGISTRY} -q
+
+                    echo "Pushing images with tag ${BUILD_NUMBER}..."
+                    docker push ${IMAGE_BACKEND}:${BUILD_NUMBER}
+                    docker push ${IMAGE_FRONTEND}:${BUILD_NUMBER}
+
+                    echo "Tagging and pushing 'latest'..."
+                    docker tag ${IMAGE_BACKEND}:${BUILD_NUMBER} ${IMAGE_BACKEND}:latest
+                    docker tag ${IMAGE_FRONTEND}:${BUILD_NUMBER} ${IMAGE_FRONTEND}:latest
+                    docker push ${IMAGE_BACKEND}:latest
+                    docker push ${IMAGE_FRONTEND}:latest
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy to GKE') {
+            steps {
+                withCredentials([file(credentialsId: 'jenkins-gke-sa', variable: 'GCP_KEY_FILE')]) {
+                    sh '''
+                    set -e
+                    echo "Authenticating and fetching GKE credentials..."
+                    gcloud auth activate-service-account --key-file=${GCP_KEY_FILE}
+                    gcloud config set project ${PROJECT_ID}
+                    gcloud container clusters get-credentials ${CLUSTER_NAME} --region ${REGION}
+
+                    echo "Applying Kubernetes manifests and updating images..."
+                    kubectl apply -f k8s/
+                    kubectl set image deployment/dotnet-crud-backend backend=${IMAGE_BACKEND}:${BUILD_NUMBER} -n ${KUBE_NAMESPACE} || true
+                    kubectl set image deployment/dotnet-crud-frontend frontend=${IMAGE_FRONTEND}:${BUILD_NUMBER} -n ${KUBE_NAMESPACE} || true
+                    kubectl rollout status deployment/dotnet-crud-backend -n ${KUBE_NAMESPACE}
+                    kubectl rollout status deployment/dotnet-crud-frontend -n ${KUBE_NAMESPACE}
+
+                    echo "---------------------------------------"
+                    echo "Service URL:"
+                    echo "---------------------------------------"
+                    FRONTEND_IP=$(kubectl -n ${KUBE_NAMESPACE} get svc dotnet-crud-frontend-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                    if [ -n "$FRONTEND_IP" ]; then
+                      echo "Application URL: http://$FRONTEND_IP"
+                    else
+                      echo "Frontend LoadBalancer IP not ready yet. Run: kubectl -n ${KUBE_NAMESPACE} get svc dotnet-crud-frontend-service -w"
+                    fi
+                    '''
                 }
             }
         }
@@ -59,6 +90,17 @@ pipeline {
     post {
         success {
             echo 'Deployment successful!'
+            script {
+                sh """
+                    set -e
+                    FRONTEND_IP=$(kubectl -n ${KUBE_NAMESPACE} get svc dotnet-crud-frontend-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                    if [ -n "$FRONTEND_IP" ]; then
+                      echo "\nApplication URL: http://$FRONTEND_IP\n"
+                    else
+                      echo "\nApplication LoadBalancer external IP not ready yet. Run: kubectl -n ${KUBE_NAMESPACE} get svc dotnet-crud-frontend-service -w\n"
+                    fi
+                """
+            }
         }
         failure {
             echo 'Deployment failed!'
