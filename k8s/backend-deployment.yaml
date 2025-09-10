@@ -31,3 +31,17 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "500m"
+      - name: cloud-sql-proxy
+        image: gcr.io/cloud-sql-proxy:2.8.0
+        args:
+          - "iron-handler-471307-u7:us-central1:dotnet-crud-db"
+          - "--port=1433"
+        ports:
+          - containerPort: 1433
+        securityContext:
+          # The Cloud SQL Proxy requires an unprivileged user
+          runAsNonRoot: true
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
