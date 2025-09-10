@@ -21,10 +21,10 @@ pipeline {
         stage('Docker Build') {
             steps {
                 script {
-                    sh """
+                    sh '''
                         docker build -f backend.Dockerfile -t ${IMAGE_BACKEND}:${BUILD_NUMBER} .
                         docker build -f frontend.Dockerfile -t ${IMAGE_FRONTEND}:${BUILD_NUMBER} .
-                    """
+                    '''
                 }
             }
         }
@@ -91,7 +91,7 @@ pipeline {
         success {
             echo 'Deployment successful!'
             script {
-                sh """
+                sh '''
                     set -e
                     FRONTEND_IP=$(kubectl -n ${KUBE_NAMESPACE} get svc dotnet-crud-frontend-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
                     if [ -n "$FRONTEND_IP" ]; then
@@ -99,7 +99,7 @@ pipeline {
                     else
                       echo "\nApplication LoadBalancer external IP not ready yet. Run: kubectl -n ${KUBE_NAMESPACE} get svc dotnet-crud-frontend-service -w\n"
                     fi
-                """
+                '''
             }
         }
         failure {
