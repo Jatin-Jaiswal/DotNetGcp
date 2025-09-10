@@ -4,4 +4,4 @@ metadata:
   name: dotnet-crud-config
   namespace: dotnet-app-gcp
 data:
-  ConnectionStrings__DefaultConnection: "Server=10.2.16.5,1433;Database=master;User Id=sqlserver;Password=YourStrongPassword_123;TrustServerCertificate=True;Encrypt=True;MultipleActiveResultSets=True;Connection Timeout=30;"
+  ConnectionStrings__DefaultConnection: "Server=127.0.0.1,1433;Database=ProductDb;User Id=dotnetapp;Password=DotNetAppPassword_123;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True;Connection Timeout=30;"

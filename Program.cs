@@ -8,8 +8,7 @@ using Microsoft.Extensions.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// load configuration and connection string
-builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+// configuration is already loaded by default (appsettings.json, env vars, etc.)
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
 // register DbContext
@@ -49,7 +48,7 @@ using (var scope = app.Services.CreateScope())
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Connection failed: {ex.Message}");
+            Console.WriteLine($"Connection failed: {ex}");
             retries++;
             if (retries < maxRetries)
             {

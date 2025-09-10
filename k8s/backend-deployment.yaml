@@ -4,7 +4,7 @@ metadata:
   name: dotnet-crud-backend
   namespace: dotnet-app-gcp
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: dotnet-crud-backend
@@ -13,9 +13,10 @@ spec:
       labels:
         app: dotnet-crud-backend
     spec:
+      serviceAccountName: cloud-sql-proxy-sa
       containers:
       - name: backend
-        image: gcr.io/iron-handler-471307-u7/dotnet-crud-backend:latest
+        image: gcr.io/iron-handler-471307-u7/dotnet-crud-backend:v3
         ports:
         - containerPort: 80
         env:
@@ -32,10 +33,11 @@ spec:
             memory: "512Mi"
             cpu: "500m"
       - name: cloud-sql-proxy
-        image: gcr.io/cloud-sql-proxy:2.8.0
+        image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.8.0
         args:
           - "iron-handler-471307-u7:us-central1:dotnet-crud-db"
           - "--port=1433"
+          - "--credentials-file=/secrets/credentials.json"
         ports:
           - containerPort: 1433
         securityContext:
@@ -45,3 +47,11 @@ spec:
           limits:
             cpu: 100m
             memory: 128Mi
+        volumeMounts:
+          - name: cloud-sql-proxy-credentials
+            mountPath: /secrets
+            readOnly: true
+      volumes:
+        - name: cloud-sql-proxy-credentials
+          secret:
+            secretName: cloud-sql-proxy-credentials
