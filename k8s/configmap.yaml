@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dotnet-crud-config
+  namespace: dotnet-app-gcp
+data:
+  ConnectionStrings__DefaultConnection: "Server=10.2.16.5,1433;Database=ProductDb;User Id=dotnetapp;Password=DotNetAppPassword_123;TrustServerCertificate=True;Encrypt=True"
