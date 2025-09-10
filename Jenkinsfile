@@ -7,7 +7,7 @@ pipeline {
         IMAGE_BACKEND = "${GCR_REGISTRY}/${PROJECT_ID}/dotnet-crud-backend"
         IMAGE_FRONTEND = "${GCR_REGISTRY}/${PROJECT_ID}/dotnet-crud-frontend"
         CLUSTER_NAME = 'jenkins-cluster'
-        REGION = 'us-central1'
+        REGION = 'us-central1-a'
         KUBE_NAMESPACE = 'dotnet-app-gcp'
     }
     
